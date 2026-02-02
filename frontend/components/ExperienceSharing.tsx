@@ -220,7 +220,7 @@ const ExperienceSharing: React.FC<ExperienceSharingProps> = ({ user }) => {
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Company Name *</label>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Company Name <span className="text-rose-500">*</span></label>
                   <input
                     type="text"
                     required
@@ -231,7 +231,7 @@ const ExperienceSharing: React.FC<ExperienceSharingProps> = ({ user }) => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Job Role *</label>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Job Role <span className="text-rose-500">*</span></label>
                   <input
                     type="text"
                     required
@@ -245,7 +245,7 @@ const ExperienceSharing: React.FC<ExperienceSharingProps> = ({ user }) => {
 
               <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Interview Date *</label>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Interview Date <span className="text-rose-500">*</span></label>
                   <input
                     type="date"
                     required
@@ -255,7 +255,7 @@ const ExperienceSharing: React.FC<ExperienceSharingProps> = ({ user }) => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Difficulty Level *</label>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Difficulty Level <span className="text-rose-500">*</span></label>
                   <select
                     value={difficultyLevel}
                     onChange={(e) => setDifficultyLevel(Number(e.target.value))}
@@ -272,7 +272,7 @@ const ExperienceSharing: React.FC<ExperienceSharingProps> = ({ user }) => {
 
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-wider">Interview Rounds *</label>
+                  <label className="text-xs font-black text-slate-400 uppercase tracking-wider">Interview Rounds <span className="text-rose-500">*</span></label>
                   <button
                     type="button"
                     onClick={addRound}
@@ -318,7 +318,7 @@ const ExperienceSharing: React.FC<ExperienceSharingProps> = ({ user }) => {
               </div>
 
               <div>
-                <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Overall Experience *</label>
+                <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Overall Experience <span className="text-rose-500">*</span></label>
                 <textarea
                   required
                   value={overallExperience}
