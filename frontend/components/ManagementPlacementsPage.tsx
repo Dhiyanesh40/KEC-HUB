@@ -23,7 +23,18 @@ const formatMaybeDate = (value?: string | null): string => {
   if (!v) return "";
   const dt = new Date(v);
   if (Number.isNaN(dt.getTime())) return v;
-  return dt.toLocaleString();
+  const day = String(dt.getDate()).padStart(2, '0');
+  const month = String(dt.getMonth() + 1).padStart(2, '0');
+  const year = dt.getFullYear();
+  return `${day}-${month}-${year}`;
+};
+
+const getTodayString = (): string => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const ManagementPlacementsPage: React.FC<Props> = ({ user }) => {
@@ -243,7 +254,7 @@ const ManagementPlacementsPage: React.FC<Props> = ({ user }) => {
 
       <section className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
         <h3 className="text-xl font-black text-slate-800">Create Notice</h3>
-        <p className="text-sm font-bold text-slate-500 mt-2">Use ISO strings for date/datetime (example: 2026-02-01 or 2026-02-01T09:00:00).</p>
+        <p className="text-sm font-bold text-slate-500 mt-2">Select dates using the calendar picker. Only current and future dates are allowed.</p>
 
         <form onSubmit={submit} className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div className="space-y-2">
@@ -268,12 +279,12 @@ const ManagementPlacementsPage: React.FC<Props> = ({ user }) => {
 
           <div className="space-y-2">
             <label className="text-xs font-black text-slate-500 uppercase tracking-widest">Visit Date (optional)</label>
-            <input value={visitDate} onChange={(e) => setVisitDate(e.target.value)} placeholder="2026-02-10" className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-slate-50 font-bold" />
+            <input type="date" min={getTodayString()} value={visitDate} onChange={(e) => setVisitDate(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-slate-50 font-bold" />
           </div>
 
           <div className="space-y-2">
             <label className="text-xs font-black text-slate-500 uppercase tracking-widest">Application Deadline (optional)</label>
-            <input value={applicationDeadline} onChange={(e) => setApplicationDeadline(e.target.value)} placeholder="2026-02-07" className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-slate-50 font-bold" />
+            <input type="date" min={getTodayString()} value={applicationDeadline} onChange={(e) => setApplicationDeadline(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-slate-50 font-bold" />
           </div>
 
           <div className="space-y-2">
@@ -474,7 +485,13 @@ const ManagementPlacementsPage: React.FC<Props> = ({ user }) => {
                               </p>
                               {round.uploadedAt && (
                                 <p className="text-[10px] font-bold text-slate-400 mt-1">
-                                  Uploaded: {new Date(round.uploadedAt).toLocaleString()}
+                                  Uploaded: {(() => {
+                                    const d = new Date(round.uploadedAt);
+                                    const day = String(d.getDate()).padStart(2, '0');
+                                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                                    const year = d.getFullYear();
+                                    return `${day}-${month}-${year}`;
+                                  })()}
                                 </p>
                               )}
                             </div>
