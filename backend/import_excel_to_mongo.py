@@ -27,7 +27,7 @@ async def import_excel_to_mongo():
         
         # Connect to MongoDB
         client = AsyncIOMotorClient(mongo_uri)
-        db = client.kec_hub  # Database name
+        db = client.kec_opportunities_hub  # Database name (must match settings.py)
         
         # Process each sheet
         for sheet_name in excel_file.sheet_names:

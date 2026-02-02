@@ -346,8 +346,8 @@ const AppContent: React.FC = () => {
             {/* Student Routes */}
             {user.role === 'student' && (
               <>
-                <Route path="/opportunities" element={<Layout user={user} onSignOut={handleSignOut}><OpportunitiesPage /></Layout>} />
-                <Route path="/tracking" element={<Layout user={user} onSignOut={handleSignOut}><TrackingPage /></Layout>} />
+                <Route path="/opportunities" element={<Layout user={user} onSignOut={handleSignOut}><OpportunitiesPageWrapper /></Layout>} />
+                <Route path="/tracking" element={<Layout user={user} onSignOut={handleSignOut}><TrackingPageWrapper /></Layout>} />
                 <Route path="/placements" element={<Layout user={user} onSignOut={handleSignOut}><StudentPlacementsPage user={user} /></Layout>} />
                 <Route path="/experiences" element={<Layout user={user} onSignOut={handleSignOut}><ExperienceSharing user={user} /></Layout>} />
                 <Route path="/student_instructions" element={<Layout user={user} onSignOut={handleSignOut}><StudentInstructionsPage user={user} /></Layout>} />

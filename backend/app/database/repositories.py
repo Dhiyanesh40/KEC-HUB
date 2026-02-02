@@ -53,18 +53,38 @@ class VerifiedEmailRepository:
 
 
 class StudentEmailRepository:
-    """Repository for checking valid student emails from sheet1 collection"""
+    """Repository for checking valid student emails from kec_hub.sheet1 collection"""
     def __init__(self, db: AsyncIOMotorDatabase):
+        # db here should be the kec_hub database with sheet1 containing 7888 student emails
         self.col = db["sheet1"]
+        self.db = db  # Store reference for debugging
+        print(f"[REPO] StudentEmailRepository initialized with database: {db.name}")
 
     async def ensure_indexes(self) -> None:
         # Create index on Email ID field for faster lookups
         await self.col.create_index("Email ID")
 
+    async def has_data(self) -> bool:
+        """Check if the collection has any documents (email validation data loaded)."""
+        try:
+            count = await self.col.count_documents({}, limit=1)
+            print(f"[REPO] has_data() check - Database: {self.db.name}, Collection: sheet1, Count: {count}")
+            return count > 0
+        except Exception as e:
+            print(f"[REPO] has_data() error: {e}")
+            return False
+
     async def is_valid_student_email(self, email: str) -> bool:
-        """Check if email exists in the student database"""
-        doc = await self.col.find_one({"Email ID": email})
-        return doc is not None
+        """Check if email exists in the kec_hub.sheet1 student database"""
+        try:
+            doc = await self.col.find_one({"Email ID": email})
+            print(f"[REPO] is_valid_student_email({email}) - Found: {doc is not None}")
+            if doc:
+                print(f"[REPO] Student record: Name={doc.get('Name')}, Roll No={doc.get('Roll No')}")
+            return doc is not None
+        except Exception as e:
+            print(f"[REPO] is_valid_student_email error: {e}")
+            return False
     
     async def get_student_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Get student details by email"""

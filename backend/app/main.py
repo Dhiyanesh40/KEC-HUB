@@ -4,11 +4,12 @@ import os
 import secrets
 import csv
 import io
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import File, UploadFile
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi import Form
 from fastapi import Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,7 +34,7 @@ except Exception:  # pragma: no cover
     openpyxl = None  # type: ignore
 
 from .auth_service import AuthService
-from .database.db import connect_mongodb, disconnect_mongodb, get_db, mongodb_ok
+from .database.db import connect_mongodb, disconnect_mongodb, get_db, get_student_validation_db, mongodb_ok
 from .models import (
     ApiResponse,
     AlumniListResponse,
@@ -105,21 +106,8 @@ from .opportunity_extractor.extractor import OpportunityExtractor
 from .opportunity_extractor.types import ProfileSignals
 from .resume_analyzer import GroqResumeAnalyzer
 
-app = FastAPI(title="KEC Opportunities Hub API")
 
-_BACKEND_DIR = Path(__file__).resolve().parents[1]
-_UPLOADS_DIR = _BACKEND_DIR / "uploads"
-_RESUMES_DIR = _UPLOADS_DIR / "resumes"
-_EVENT_POSTERS_DIR = _UPLOADS_DIR / "event_posters"
-_MANAGEMENT_NOTES_DIR = _UPLOADS_DIR / "management_notes"
-
-_RESUMES_DIR.mkdir(parents=True, exist_ok=True)
-_EVENT_POSTERS_DIR.mkdir(parents=True, exist_ok=True)
-_MANAGEMENT_NOTES_DIR.mkdir(parents=True, exist_ok=True)
-
-# Serve uploaded files (resume) for development.
-app.mount("/uploads", StaticFiles(directory=str(_UPLOADS_DIR)), name="uploads")
-
+# Global repository variables
 _auth_service: AuthService | None = None
 _user_repo: UserRepository | None = None
 _alumni_posts: AlumniPostRepository | None = None
@@ -135,38 +123,25 @@ _mgmt_notes: ManagementNoteRepository | None = None
 _opportunity_extractor = OpportunityExtractor()
 _resume_analyzer: GroqResumeAnalyzer | None = None
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origin_list(),
-    allow_credentials=True,
-    allow_methods=["*"] ,
-    allow_headers=["*"],
-)
 
-
-@app.on_event("startup")
-async def _startup() -> None:
-    global _auth_service
-    global _user_repo
-    global _alumni_posts
-    global _referrals
-    global _chat_threads
-    global _chat_messages
-    global _events
-    global _event_regs
-    global _placements
-    global _placement_experiences
-    global _mgmt_instructions
-    global _mgmt_notes
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown events"""
+    global _auth_service, _user_repo, _alumni_posts, _referrals
+    global _chat_threads, _chat_messages, _events, _event_regs
+    global _placements, _placement_experiences, _mgmt_instructions, _mgmt_notes
     global _resume_analyzer
-
+    
+    # Startup
     await connect_mongodb()
     if mongodb_ok():
-        db = get_db()
+        db = get_db()  # Main application database (kec_opportunities_hub)
+        student_validation_db = get_student_validation_db()  # Student email validation (kec_hub)
+        
         otp_repo = OtpRepository(db)
         verified_repo = VerifiedEmailRepository(db)
         user_repo = UserRepository(db)
-        student_email_repo = StudentEmailRepository(db)
+        student_email_repo = StudentEmailRepository(student_validation_db)  # Use kec_hub for validation
         alumni_posts = AlumniPostRepository(db)
         referrals = ReferralRepository(db)
         chat_threads = ChatThreadRepository(db)
@@ -205,7 +180,6 @@ async def _startup() -> None:
         _placement_experiences = placement_experiences
         _mgmt_instructions = mgmt_instructions
         _mgmt_notes = mgmt_notes
-
     else:
         # Backend can still start, but auth endpoints will return a clear error.
         _auth_service = None
@@ -221,6 +195,35 @@ async def _startup() -> None:
         _mgmt_notes = None
 
     _resume_analyzer = GroqResumeAnalyzer.from_settings()
+    
+    yield  # Application runs here
+    
+    # Shutdown
+    await disconnect_mongodb()
+
+
+app = FastAPI(title="KEC Opportunities Hub API", lifespan=lifespan)
+
+_BACKEND_DIR = Path(__file__).resolve().parents[1]
+_UPLOADS_DIR = _BACKEND_DIR / "uploads"
+_RESUMES_DIR = _UPLOADS_DIR / "resumes"
+_EVENT_POSTERS_DIR = _UPLOADS_DIR / "event_posters"
+_MANAGEMENT_NOTES_DIR = _UPLOADS_DIR / "management_notes"
+
+_RESUMES_DIR.mkdir(parents=True, exist_ok=True)
+_EVENT_POSTERS_DIR.mkdir(parents=True, exist_ok=True)
+_MANAGEMENT_NOTES_DIR.mkdir(parents=True, exist_ok=True)
+
+# Serve uploaded files (resume) for development.
+app.mount("/uploads", StaticFiles(directory=str(_UPLOADS_DIR)), name="uploads")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origin_list(),
+    allow_credentials=True,
+    allow_methods=["*"] ,
+    allow_headers=["*"],
+)
 
 
 def _extract_resume_text_pdf(data: bytes) -> str:
@@ -511,11 +514,6 @@ def _parse_departments_csv(raw: str | None) -> list[str]:
     return [p.strip() for p in s.split(",") if p.strip()]
 
 
-@app.on_event("shutdown")
-async def _shutdown() -> None:
-    await disconnect_mongodb()
-
-
 @app.get("/health", response_model=ApiResponse)
 def health() -> ApiResponse:
     return ApiResponse(success=True, message=f"ok (db: {'connected' if mongodb_ok() else 'disconnected'})")
@@ -630,13 +628,14 @@ async def register(payload: RegisterRequest) -> AuthUserResponse:
 @app.post("/auth/login", response_model=AuthUserResponse)
 async def login(payload: LoginRequest) -> AuthUserResponse:
     if not mongodb_ok() or _auth_service is None:
-        return AuthUserResponse(success=False, message="MongoDB is not connected. Start MongoDB and retry.")
+        raise HTTPException(status_code=503, detail="MongoDB is not connected. Start MongoDB and retry.")
 
     try:
         user = await _auth_service.login(payload.email, payload.password, payload.role)
         return AuthUserResponse(success=True, message="Login successful!", user=UserProfile(**user))
     except ValueError as e:
-        return AuthUserResponse(success=False, message=str(e))
+        # Authentication failures should return 401 Unauthorized, not 200 OK
+        raise HTTPException(status_code=401, detail=str(e))
 
 
 @app.get("/profile/{email}", response_model=ProfileResponse)
