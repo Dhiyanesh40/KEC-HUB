@@ -21,6 +21,7 @@ import ManagementNotesPage from './components/ManagementNotesPage';
 import StudentInstructionsPage from './components/StudentInstructionsPage';
 import StudentNotesPage from './components/StudentNotesPage';
 import StudentResumeAnalysisPage from './components/StudentResumeAnalysisPage';
+import ExperienceSharing from './components/ExperienceSharing';
 import { eventService, EventItem } from './services/events';
 import { alumniService, AlumniPost } from './services/alumni';
 import { referralService, ReferralRequestItem } from './services/referrals';
@@ -944,6 +945,9 @@ const App: React.FC = () => {
         )}
         {activeTab === 'resume_analyzer' && user.role === 'student' && (
           <StudentResumeAnalysisPage user={user} />
+        )}
+        {activeTab === 'experiences' && user.role === 'student' && (
+          <ExperienceSharing user={user} />
         )}
         {activeTab === 'chat' && (user.role === 'student' || user.role === 'alumni') && (
           <ChatPage user={user} />

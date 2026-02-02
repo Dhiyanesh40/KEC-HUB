@@ -61,6 +61,9 @@ from .models import (
     PlacementCreateRequest,
     PlacementItem,
     PlacementListResponse,
+    PlacementExperienceCreateRequest,
+    PlacementExperienceItem,
+    PlacementExperienceListResponse,
     PlacementRound,
     ProfileResponse,
     ProfileUpdateRequest,
@@ -87,6 +90,7 @@ from .database.repositories import (
     ManagementInstructionRepository,
     ManagementNoteRepository,
     PlacementRepository,
+    PlacementExperienceRepository,
     OtpRepository,
     ReferralRepository,
     UserRepository,
@@ -124,6 +128,7 @@ _chat_messages: ChatMessageRepository | None = None
 _events: EventRepository | None = None
 _event_regs: EventRegistrationRepository | None = None
 _placements: PlacementRepository | None = None
+_placement_experiences: PlacementExperienceRepository | None = None
 _mgmt_instructions: ManagementInstructionRepository | None = None
 _mgmt_notes: ManagementNoteRepository | None = None
 _opportunity_extractor = OpportunityExtractor()
@@ -149,6 +154,7 @@ async def _startup() -> None:
     global _events
     global _event_regs
     global _placements
+    global _placement_experiences
     global _mgmt_instructions
     global _mgmt_notes
     global _resume_analyzer
@@ -166,6 +172,7 @@ async def _startup() -> None:
         events = EventRepository(db)
         event_regs = EventRegistrationRepository(db)
         placements = PlacementRepository(db)
+        placement_experiences = PlacementExperienceRepository(db)
         mgmt_instructions = ManagementInstructionRepository(db)
         mgmt_notes = ManagementNoteRepository(db)
 
@@ -179,6 +186,7 @@ async def _startup() -> None:
         await events.ensure_indexes()
         await event_regs.ensure_indexes()
         await placements.ensure_indexes()
+        await placement_experiences.ensure_indexes()
         await mgmt_instructions.ensure_indexes()
         await mgmt_notes.ensure_indexes()
 
@@ -191,6 +199,7 @@ async def _startup() -> None:
         _events = events
         _event_regs = event_regs
         _placements = placements
+        _placement_experiences = placement_experiences
         _mgmt_instructions = mgmt_instructions
         _mgmt_notes = mgmt_notes
 
@@ -2061,3 +2070,83 @@ async def chat_send(payload: ChatSendRequest) -> ApiResponse:
         str(payload.senderEmail),
     )
     return ApiResponse(success=True, message=thread_id)
+
+
+def _to_placement_experience_item(doc: dict) -> PlacementExperienceItem:
+    return PlacementExperienceItem(
+        id=str(doc["_id"]),
+        studentEmail=str(doc.get("studentEmail", "")),
+        studentName=doc.get("studentName"),
+        studentDepartment=doc.get("studentDepartment"),
+        companyName=str(doc.get("companyName", "")),
+        jobRole=str(doc.get("jobRole", "")),
+        interviewDate=str(doc.get("interviewDate", "")),
+        rounds=doc.get("rounds", []),
+        difficultyLevel=int(doc.get("difficultyLevel", 1)),
+        overallExperience=str(doc.get("overallExperience", "")),
+        createdAt=doc.get("createdAt", datetime.now(timezone.utc)).isoformat(),
+    )
+
+
+@app.post("/api/experiences", response_model=ApiResponse)
+async def create_placement_experience(payload: PlacementExperienceCreateRequest) -> ApiResponse:
+    if not _is_allowed_domain(str(payload.studentEmail)):
+        return ApiResponse(success=False, message="Only @kongu.edu or @kongu.ac.in emails are permitted.")
+    if not mongodb_ok() or _placement_experiences is None or _user_repo is None:
+        return ApiResponse(success=False, message="MongoDB is not connected. Start MongoDB and retry.")
+
+    try:
+        _require_role(payload.studentRole, "student")
+    except ValueError as e:
+        return ApiResponse(success=False, message=str(e))
+
+    student = await _user_repo.find_public_by_email_and_role(str(payload.studentEmail), "student")
+    if student is None:
+        return ApiResponse(success=False, message="Student not found.")
+
+    # Get student name and department for display
+    student_name = student.get("name", "")
+    student_dept = student.get("department", "")
+
+    await _placement_experiences.create(
+        {
+            "studentEmail": str(payload.studentEmail),
+            "studentName": student_name,
+            "studentDepartment": student_dept,
+            "companyName": payload.companyName,
+            "jobRole": payload.jobRole,
+            "interviewDate": payload.interviewDate,
+            "rounds": [r.model_dump() for r in payload.rounds],
+            "difficultyLevel": payload.difficultyLevel,
+            "overallExperience": payload.overallExperience,
+            "createdAt": datetime.now(timezone.utc),
+        }
+    )
+    return ApiResponse(success=True, message="Placement experience submitted successfully!")
+
+
+@app.get("/api/experiences/{company_name}", response_model=PlacementExperienceListResponse)
+async def get_experiences_by_company(company_name: str, limit: int = Query(default=50, ge=1, le=200)) -> PlacementExperienceListResponse:
+    if not mongodb_ok() or _placement_experiences is None:
+        return PlacementExperienceListResponse(success=False, message="MongoDB is not connected. Start MongoDB and retry.")
+
+    docs = await _placement_experiences.list_by_company(company_name, limit=int(limit))
+    return PlacementExperienceListResponse(
+        success=True,
+        message="ok",
+        experiences=[_to_placement_experience_item(d) for d in docs],
+    )
+
+
+@app.get("/api/experiences", response_model=PlacementExperienceListResponse)
+async def list_all_experiences(limit: int = Query(default=100, ge=1, le=200)) -> PlacementExperienceListResponse:
+    if not mongodb_ok() or _placement_experiences is None:
+        return PlacementExperienceListResponse(success=False, message="MongoDB is not connected. Start MongoDB and retry.")
+
+    docs = await _placement_experiences.list_all(limit=int(limit))
+    return PlacementExperienceListResponse(
+        success=True,
+        message="ok",
+        experiences=[_to_placement_experience_item(d) for d in docs],
+    )
+

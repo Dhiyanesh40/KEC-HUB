@@ -51,6 +51,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, user
         { id: 'dashboard', label: 'Dashboard', icon: '📊' },
         { id: 'opportunities', label: 'Explore Hub', icon: '🔍' },
         { id: 'placements', label: 'Placements', icon: '🏢' },
+        { id: 'experiences', label: 'Experiences', icon: '💼' },
         { id: 'student_instructions', label: 'Instructions', icon: '🧭' },
         { id: 'student_notes', label: 'Notes', icon: '📚' },
         { id: 'resume_analyzer', label: 'Resume Analyzer', icon: '🧠' },
