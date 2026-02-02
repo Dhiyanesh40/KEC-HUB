@@ -110,7 +110,7 @@ const App: React.FC = () => {
     }
   }, [user?.email, user?.role, activeTab, isCrawling]);
 
-  const handleLoginSuccess = (userData: any) => {
+  const handleLoginSuccess = async (userData: any) => {
     const skills = Array.isArray(userData?.skills) ? userData.skills : ['React', 'TypeScript'];
     const fullUser: User = {
       ...userData,
@@ -121,6 +121,19 @@ const App: React.FC = () => {
     };
     setUser(fullUser);
     localStorage.setItem('kec_current_user', JSON.stringify(fullUser));
+
+    // If registration included roll_number or phone_number, update profile
+    if (userData?.roll_number || userData?.phone_number) {
+      try {
+        const { profileService } = await import('./services/profile');
+        const updateData: any = {};
+        if (userData.roll_number) updateData.roll_number = userData.roll_number;
+        if (userData.phone_number) updateData.phone_number = userData.phone_number;
+        await profileService.updateProfile(fullUser.email, fullUser.role, updateData);
+      } catch (error) {
+        console.error('Failed to update profile with additional fields:', error);
+      }
+    }
   };
 
   const handleUserUpdated = (updated: User) => {
@@ -892,9 +905,15 @@ const App: React.FC = () => {
     </div>
   );
 
+  const handleSignOut = () => {
+    localStorage.removeItem('kec_current_user');
+    setUser(null);
+    setActiveTab('dashboard');
+  };
+
   return (
     <Router>
-      <Layout user={user} activeTab={activeTab} setActiveTab={setActiveTab}>
+      <Layout user={user} activeTab={activeTab} setActiveTab={setActiveTab} onSignOut={handleSignOut}>
         {activeTab === 'dashboard' && renderDashboard()}
         {activeTab === 'placements' && user.role === 'student' && (
           <StudentPlacementsPage user={user} />

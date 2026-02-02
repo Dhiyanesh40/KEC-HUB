@@ -16,6 +16,9 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [otpInput, setOtpInput] = useState('');
+  const [rollNumber, setRollNumber] = useState('');
+  const [department, setDepartment] = useState('Computer Science');
+  const [phoneNumber, setPhoneNumber] = useState('');
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -55,17 +58,19 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-    const res = await authService.register(name, email, password, role);
+    const res = await authService.register(name, email, password, role, department);
     if (res.success) {
       if (res.user) {
         onLoginSuccess({
           name: res.user.name || name,
           email: res.user.email || email,
           role: res.user.role || role,
-          department: res.user.department || 'Computer Science'
+          department: res.user.department || department,
+          roll_number: rollNumber || undefined,
+          phone_number: phoneNumber || undefined
         });
       } else {
-        onLoginSuccess({ name, email, role, department: "Computer Science" });
+        onLoginSuccess({ name, email, role, department, roll_number: rollNumber, phone_number: phoneNumber });
       }
     } else {
       setError(res.message);
@@ -84,7 +89,9 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
           name: res.user.name || 'Student',
           email: res.user.email || email,
           role: res.user.role || role,
-          department: res.user.department || 'Computer Science'
+          department: res.user.department || 'Computer Science',
+          roll_number: res.user.roll_number,
+          phone_number: res.user.phone_number
         });
       } else {
         onLoginSuccess({ name: "Student", email, role, department: "Computer Science" });
@@ -240,7 +247,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
             )}
 
             {step === 3 && (
-              <form onSubmit={handleRegister} className="space-y-6">
+              <form onSubmit={handleRegister} className="space-y-5">
                 <RoleSelector compact />
                 <div>
                   <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Full Name</label>
@@ -252,6 +259,47 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
                     placeholder="Enter your name"
                     className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all outline-none font-bold"
                   />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Roll Number</label>
+                    <input 
+                      type="text" 
+                      value={rollNumber}
+                      onChange={(e) => setRollNumber(e.target.value)}
+                      placeholder="e.g., 22CS101"
+                      className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all outline-none font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Phone</label>
+                    <input 
+                      type="tel" 
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      placeholder="+91XXXXXXXXXX"
+                      className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all outline-none font-bold"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Department</label>
+                  <select
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                    className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all outline-none font-bold"
+                  >
+                    <option value="Computer Science">Computer Science</option>
+                    <option value="Information Technology">Information Technology</option>
+                    <option value="Electronics and Communication">Electronics and Communication</option>
+                    <option value="Electrical and Electronics">Electrical and Electronics</option>
+                    <option value="Mechanical">Mechanical</option>
+                    <option value="Civil">Civil</option>
+                    <option value="Chemical">Chemical</option>
+                    <option value="Biotechnology">Biotechnology</option>
+                    <option value="Agriculture">Agriculture</option>
+                    <option value="Other">Other</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Password</label>
@@ -294,8 +342,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
         © 2024 Kongu Engineering College
       </p>
 
-      <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-50 rounded-full blur-3xl opacity-50 -translate-y-1/2 translate-x-1/2"></div>
-      <div className="absolute bottom-0 left-0 w-96 h-96 bg-rose-50 rounded-full blur-3xl opacity-50 translate-y-1/2 -translate-x-1/2"></div>
+      {/* <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-50 rounded-full blur-3xl opacity-50 -translate-y-1/2 translate-x-1/2"></div>
+      <div className="absolute bottom-0 left-0 w-96 h-96 bg-rose-50 rounded-full blur-3xl opacity-50 translate-y-1/2 -translate-x-1/2"></div> */}
     </div>
   );
 };

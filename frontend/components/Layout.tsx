@@ -7,9 +7,10 @@ interface LayoutProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   user: User;
+  onSignOut: () => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, user }) => {
+const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, user, onSignOut }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const userInitials = useMemo(() => {
@@ -178,6 +179,15 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, user
             <div className="h-8 w-px bg-slate-200 hidden sm:block"></div>
             <button className="hidden sm:block text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full">
               {userBadge}
+            </button>
+            <button 
+              onClick={onSignOut}
+              className="p-2 rounded-full hover:bg-rose-50 text-slate-600 hover:text-rose-600 transition-colors"
+              title="Sign Out"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
             </button>
           </div>
         </header>
