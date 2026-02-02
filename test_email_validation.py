@@ -9,7 +9,7 @@ BASE_URL = "http://localhost:8000"
 def test_student_registration():
     """Test student registration with valid and invalid emails"""
     
-    # Test 1: Try to register with a valid student email from the database
+    # Test 1: Try to register with a valid student email from the database 
     print("\n=== Test 1: Valid Student Email ===")
     valid_email = "abhinavs.23civil@kongu.edu"  # From the imported data
     
