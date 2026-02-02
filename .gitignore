@@ -1,0 +1,14 @@
+.env
+.env.*
+node_modules/
+venv/
+__pycache__/
+*.log
+*.zip
+*.rar
+*.exe
+*.mp4
+*.h5
+*.pt
+dist/
+build/
