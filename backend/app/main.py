@@ -27,6 +27,11 @@ try:
 except Exception:  # pragma: no cover
     _pdfminer_extract_text = None  # type: ignore
 
+try:
+    import openpyxl  # type: ignore
+except Exception:  # pragma: no cover
+    openpyxl = None  # type: ignore
+
 from .auth_service import AuthService
 from .database.db import connect_mongodb, disconnect_mongodb, get_db, mongodb_ok
 from .models import (
@@ -56,6 +61,7 @@ from .models import (
     PlacementCreateRequest,
     PlacementItem,
     PlacementListResponse,
+    PlacementRound,
     ProfileResponse,
     ProfileUpdateRequest,
     RegisterRequest,
@@ -66,6 +72,8 @@ from .models import (
     ResumeAnalysisResult,
     ResumeImprovement,
     SendOtpRequest,
+    StudentPlacementStatusResponse,
+    StudentRoundStatus,
     UserProfile,
     UserRole,
     VerifyOtpRequest,
@@ -85,7 +93,7 @@ from .database.repositories import (
     VerifiedEmailRepository,
     make_thread_id,
 )
-from .email_sender import notify_referral_decision, notify_referral_request
+from .email_sender import notify_referral_decision, notify_referral_request, notify_placement_round_selection
 from .settings import settings
 
 from .opportunity_extractor.extractor import OpportunityExtractor
@@ -416,6 +424,18 @@ def _to_event_item(d: dict) -> EventItem:
 
 def _to_placement_item(d: dict) -> PlacementItem:
     created = d.get("createdAt")
+    rounds_data = d.get("rounds") or []
+    rounds = [
+        PlacementRound(
+            roundNumber=r.get("roundNumber", 0),
+            name=r.get("name", ""),
+            description=r.get("description"),
+            selectedStudents=r.get("selectedStudents", []),
+            uploadedAt=r.get("uploadedAt"),
+            uploadedBy=r.get("uploadedBy"),
+        )
+        for r in rounds_data
+    ]
     return PlacementItem(
         id=_doc_id(d),
         staffEmail=d.get("staffEmail"),
@@ -431,6 +451,7 @@ def _to_placement_item(d: dict) -> PlacementItem:
         minCgpa=d.get("minCgpa"),
         maxArrears=d.get("maxArrears"),
         resources=d.get("resources") or [],
+        rounds=rounds,
         createdAt=_iso(created) if isinstance(created, datetime) else str(created or ""),
     )
 
@@ -796,6 +817,19 @@ async def create_placement_notice(payload: PlacementCreateRequest) -> ApiRespons
         allowed = []
     allowed_lower = [d.lower() for d in allowed]
 
+    # Convert rounds info to storage format
+    rounds_data = [
+        {
+            "roundNumber": idx + 1,
+            "name": r.name,
+            "description": r.description,
+            "selectedStudents": [],
+            "uploadedAt": None,
+            "uploadedBy": None,
+        }
+        for idx, r in enumerate(payload.rounds or [])
+    ]
+
     await _placements.create(
         {
             "staffEmail": str(payload.staffEmail),
@@ -812,6 +846,7 @@ async def create_placement_notice(payload: PlacementCreateRequest) -> ApiRespons
             "minCgpa": float(payload.minCgpa) if payload.minCgpa is not None else None,
             "maxArrears": int(payload.maxArrears) if payload.maxArrears is not None else None,
             "resources": [r.model_dump() for r in (payload.resources or [])],
+            "rounds": rounds_data,
             "createdAt": datetime.now(timezone.utc),
         }
     )
@@ -989,6 +1024,274 @@ async def export_eligible_students_csv(
         iter([csv_bytes]),
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},
+    )
+
+
+@app.post("/placements/{notice_id}/round/{round_number}/upload-students", response_model=ApiResponse)
+async def upload_round_students(
+    notice_id: str,
+    round_number: int,
+    email: str = Query(...),
+    role: UserRole = Query("management"),
+    file: UploadFile = File(...),
+) -> ApiResponse:
+    """Upload CSV/Excel file with student emails or roll numbers for a specific round."""
+    if not _is_allowed_domain(email):
+        return ApiResponse(success=False, message="Only @kongu.edu or @kongu.ac.in emails are permitted.")
+    if not mongodb_ok() or _placements is None or _user_repo is None:
+        return ApiResponse(success=False, message="MongoDB is not connected. Start MongoDB and retry.")
+    try:
+        _require_role(role, "management")
+    except ValueError as e:
+        return ApiResponse(success=False, message=str(e))
+
+    notice = await _placements.get_by_id(notice_id)
+    if notice is None:
+        return ApiResponse(success=False, message="Placement notice not found.")
+
+    staff_email = str(notice.get("staffEmail") or "").strip().lower()
+    if staff_email != email.strip().lower():
+        return ApiResponse(success=False, message="You can only upload students for your own placements.")
+
+    # Read the uploaded file
+    content = await file.read()
+    if not content:
+        return ApiResponse(success=False, message="Empty file uploaded.")
+
+    filename = (file.filename or "").lower()
+    student_identifiers: list[str] = []
+
+    # Handle Excel files (.xlsx, .xls)
+    if filename.endswith((".xlsx", ".xls")):
+        if openpyxl is None:
+            return ApiResponse(success=False, message="Excel support not available. Install openpyxl and restart the server.")
+        
+        try:
+            workbook = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+            sheet = workbook.active
+            
+            # Read headers from first row
+            headers = []
+            for cell in sheet[1]:
+                if cell.value:
+                    headers.append(str(cell.value).strip())
+            
+            if not headers:
+                return ApiResponse(success=False, message="Excel file has no headers in the first row.")
+            
+            # Find column indices
+            email_col_idx = None
+            rollno_col_idx = None
+            name_col_idx = None
+            
+            for idx, h in enumerate(headers):
+                h_lower = h.lower().strip()
+                if h_lower in ["email", "student_email", "studentemail", "e-mail"]:
+                    email_col_idx = idx
+                elif h_lower in ["roll_number", "rollnumber", "roll_no", "rollno", "roll"]:
+                    rollno_col_idx = idx
+                elif h_lower in ["name", "student_name", "studentname", "full_name"]:
+                    name_col_idx = idx
+            
+            # Read data rows (skip header row)
+            for row_idx, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
+                if not row or all(cell is None or str(cell).strip() == "" for cell in row):
+                    continue
+                
+                identifier = None
+                if email_col_idx is not None and len(row) > email_col_idx and row[email_col_idx]:
+                    identifier = str(row[email_col_idx]).strip().lower()
+                elif rollno_col_idx is not None and len(row) > rollno_col_idx and row[rollno_col_idx]:
+                    identifier = str(row[rollno_col_idx]).strip()
+                elif name_col_idx is not None and len(row) > name_col_idx and row[name_col_idx]:
+                    identifier = str(row[name_col_idx]).strip()
+                
+                if identifier:
+                    student_identifiers.append(identifier)
+            
+            workbook.close()
+        
+        except Exception as e:
+            return ApiResponse(success=False, message=f"Failed to parse Excel file: {str(e)}")
+    
+    # Handle CSV files
+    else:
+        try:
+            text = content.decode("utf-8-sig")  # Handle BOM
+        except UnicodeDecodeError:
+            try:
+                text = content.decode("latin-1")
+            except Exception:
+                return ApiResponse(success=False, message="Could not decode file. Please ensure it's UTF-8 CSV or Excel format.")
+
+        # Parse CSV with proper newline handling
+        try:
+            # Use StringIO with newline parameter to handle embedded newlines properly
+            reader = csv.DictReader(io.StringIO(text, newline=''))
+            headers = reader.fieldnames or []
+            
+            # Look for common column names (case-insensitive)
+            email_col = None
+            rollno_col = None
+            name_col = None
+            
+            for h in headers:
+                h_lower = h.lower().strip()
+                if h_lower in ["email", "student_email", "studentemail", "e-mail"]:
+                    email_col = h
+                elif h_lower in ["roll_number", "rollnumber", "roll_no", "rollno", "roll"]:
+                    rollno_col = h
+                elif h_lower in ["name", "student_name", "studentname", "full_name"]:
+                    name_col = h
+
+            for row in reader:
+                # Try email first, then roll number
+                identifier = None
+                if email_col and row.get(email_col):
+                    val = row[email_col].strip()
+                    # Remove any newlines or extra whitespace
+                    val = " ".join(val.split())
+                    identifier = val.lower()
+                elif rollno_col and row.get(rollno_col):
+                    val = row[rollno_col].strip()
+                    val = " ".join(val.split())
+                    identifier = val
+                elif name_col and row.get(name_col):
+                    val = row[name_col].strip()
+                    val = " ".join(val.split())
+                    identifier = val
+                
+                if identifier:
+                    student_identifiers.append(identifier)
+
+        except Exception as e:
+            return ApiResponse(success=False, message=f"Failed to parse CSV: {str(e)}")
+
+    if not student_identifiers:
+        return ApiResponse(success=False, message="No valid student identifiers found in file. Expected columns: email, roll_number, or name.")
+
+    # Match students in database
+    student_emails: list[str] = []
+    not_found: list[str] = []
+    
+    for identifier in student_identifiers:
+        # Check if it's already an email
+        if "@" in identifier:
+            student = await _user_repo.find_public_by_email_and_role(identifier, "student")
+            if student:
+                student_emails.append(identifier)
+            else:
+                not_found.append(identifier)
+        else:
+            # Search by roll number or name
+            users_col = _user_repo.col
+            query = {
+                "$and": [
+                    {"$or": [{"role": "student"}, {"role": {"$exists": False}}]},
+                    {"$or": [
+                        {"profile.roll_number": identifier},
+                        {"name": {"$regex": f"^{identifier}$", "$options": "i"}},
+                    ]},
+                ]
+            }
+            student = await users_col.find_one(query, {"email": 1})
+            if student:
+                student_emails.append(student.get("email"))
+            else:
+                not_found.append(identifier)
+
+    if not student_emails:
+        return ApiResponse(success=False, message=f"No students found matching the uploaded data. Unmatched: {', '.join(not_found[:5])}")
+
+    # Update the round with selected students
+    rounds = notice.get("rounds") or []
+    round_found = False
+    
+    for r in rounds:
+        if r.get("roundNumber") == round_number:
+            r["selectedStudents"] = student_emails
+            r["uploadedAt"] = _iso(datetime.now(timezone.utc))
+            r["uploadedBy"] = email
+            round_found = True
+            break
+    
+    if not round_found:
+        return ApiResponse(success=False, message=f"Round {round_number} not found in this placement.")
+
+    # Update the placement
+    await _placements.col.update_one(
+        {"_id": ObjectId(notice_id)},
+        {"$set": {"rounds": rounds}}
+    )
+
+    # Send notifications to selected students
+    company_name = notice.get("companyName", "")
+    placement_title = notice.get("title", "")
+    round_info = next((r for r in rounds if r.get("roundNumber") == round_number), None)
+    round_name = round_info.get("name", f"Round {round_number}") if round_info else f"Round {round_number}"
+
+    # Send emails asynchronously (non-blocking)
+    for student_email in student_emails:
+        try:
+            await anyio.to_thread.run_sync(
+                notify_placement_round_selection,
+                student_email,
+                company_name,
+                placement_title,
+                round_number,
+                round_name,
+            )
+        except Exception:
+            pass  # Continue even if email fails
+
+    message = f"Successfully uploaded {len(student_emails)} students for {round_name}."
+    if not_found:
+        message += f" Could not match {len(not_found)} identifiers."
+    
+    return ApiResponse(success=True, message=message)
+
+
+@app.get("/placements/my-selections/{email}", response_model=StudentPlacementStatusResponse)
+async def get_my_placement_selections(
+    email: str,
+    role: UserRole = Query("student"),
+) -> StudentPlacementStatusResponse:
+    """Get all rounds where this student has been selected."""
+    if not _is_allowed_domain(email):
+        return StudentPlacementStatusResponse(success=False, message="Only @kongu.edu or @kongu.ac.in emails are permitted.")
+    if not mongodb_ok() or _placements is None:
+        return StudentPlacementStatusResponse(success=False, message="MongoDB is not connected. Start MongoDB and retry.")
+    try:
+        _require_role(role, "student")
+    except ValueError as e:
+        return StudentPlacementStatusResponse(success=False, message=str(e))
+
+    # Find all placements where student is in any round
+    placements = _placements.col.find({"rounds.selectedStudents": email.lower()})
+    
+    selections: list[StudentRoundStatus] = []
+    async for placement in placements:
+        placement_id = _doc_id(placement)
+        company_name = placement.get("companyName", "")
+        title = placement.get("title", "")
+        
+        for r in placement.get("rounds", []):
+            if email.lower() in [s.lower() for s in r.get("selectedStudents", [])]:
+                selections.append(
+                    StudentRoundStatus(
+                        placementId=placement_id,
+                        companyName=company_name,
+                        title=title,
+                        roundNumber=r.get("roundNumber", 0),
+                        roundName=r.get("name", ""),
+                        notifiedAt=r.get("uploadedAt", ""),
+                    )
+                )
+    
+    return StudentPlacementStatusResponse(
+        success=True,
+        message=f"Found {len(selections)} round selection(s).",
+        selections=selections,
     )
 
 
