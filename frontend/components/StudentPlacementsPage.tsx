@@ -11,7 +11,10 @@ const formatMaybeDate = (value?: string | null): string => {
   if (!v) return "";
   const dt = new Date(v);
   if (Number.isNaN(dt.getTime())) return v;
-  return dt.toLocaleString();
+  const day = String(dt.getDate()).padStart(2, '0');
+  const month = String(dt.getMonth() + 1).padStart(2, '0');
+  const year = dt.getFullYear();
+  return `${day}-${month}-${year}`;
 };
 
 const StudentPlacementsPage: React.FC<Props> = ({ user }) => {
@@ -85,7 +88,13 @@ const StudentPlacementsPage: React.FC<Props> = ({ user }) => {
                 </p>
                 {sel.notifiedAt && (
                   <p className="text-xs font-bold text-indigo-200 mt-2">
-                    Notified: {new Date(sel.notifiedAt).toLocaleString()}
+                    Notified: {(() => {
+                      const d = new Date(sel.notifiedAt);
+                      const day = String(d.getDate()).padStart(2, '0');
+                      const month = String(d.getMonth() + 1).padStart(2, '0');
+                      const year = d.getFullYear();
+                      return `${day}-${month}-${year}`;
+                    })()}
                   </p>
                 )}
               </div>

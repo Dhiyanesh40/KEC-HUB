@@ -176,7 +176,13 @@ const ExperienceSharing: React.FC<ExperienceSharingProps> = ({ user }) => {
                   </div>
 
                   <div className="flex items-center gap-4 text-sm text-slate-500 font-bold mb-6">
-                    <span>📅 {new Date(exp.interviewDate).toLocaleDateString()}</span>
+                    <span>📅 {(() => {
+                      const d = new Date(exp.interviewDate);
+                      const day = String(d.getDate()).padStart(2, '0');
+                      const month = String(d.getMonth() + 1).padStart(2, '0');
+                      const year = d.getFullYear();
+                      return `${day}-${month}-${year}`;
+                    })()}</span>
                     <span>👤 {exp.studentName || 'Anonymous'}</span>
                     {exp.studentDepartment && <span>🎓 {exp.studentDepartment}</span>}
                   </div>

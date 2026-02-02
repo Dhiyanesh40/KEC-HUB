@@ -1,19 +1,16 @@
 
 import React, { useMemo, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
 import { User } from '../types';
 
 interface LayoutProps {
   children: React.ReactNode;
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
   user: User;
-  onSignOut: () => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, user, onSignOut }) => {
+const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, user }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
-  const activeTab = location.pathname.replace('/', '') || 'dashboard';
 
   const userInitials = useMemo(() => {
     const parts = (user?.name || '').trim().split(/\s+/).filter(Boolean);
@@ -87,7 +84,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onSignOut }) => {
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {/* Sidebar Mobile Overlay */}
       {isSidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-20 bg-black bg-opacity-50 lg:hidden"
           onClick={() => setIsSidebarOpen(false)}
         />
@@ -114,13 +111,13 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onSignOut }) => {
               <button
                 key={item.id}
                 onClick={() => {
-                  navigate(`/${item.id}`);
+                  setActiveTab(item.id);
                   setIsSidebarOpen(false);
                 }}
                 className={`
                   w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200
-                  ${activeTab === item.id 
-                    ? 'bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200' 
+                  ${activeTab === item.id
+                    ? 'bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200'
                     : 'text-slate-600 hover:bg-slate-100'}
                 `}
               >
@@ -148,7 +145,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onSignOut }) => {
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         {/* Navbar */}
         <header className="h-16 bg-white border-b border-slate-200 px-4 lg:px-8 flex items-center justify-between sticky top-0 z-10">
-          <button 
+          <button
             className="lg:hidden p-2 -ml-2 text-slate-600"
             onClick={() => setIsSidebarOpen(true)}
           >
@@ -164,9 +161,9 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onSignOut }) => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
               </span>
-              <input 
-                type="text" 
-                placeholder="Search anything..." 
+              <input
+                type="text"
+                placeholder="Search anything..."
                 className="pl-10 pr-4 py-2 bg-slate-100 border-none rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 w-64"
               />
             </div>
@@ -182,15 +179,6 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onSignOut }) => {
             <div className="h-8 w-px bg-slate-200 hidden sm:block"></div>
             <button className="hidden sm:block text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full">
               {userBadge}
-            </button>
-            <button 
-              onClick={onSignOut}
-              className="p-2 rounded-full hover:bg-rose-50 text-slate-600 hover:text-rose-600 transition-colors"
-              title="Sign Out"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
             </button>
           </div>
         </header>

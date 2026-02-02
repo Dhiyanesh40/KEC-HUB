@@ -52,25 +52,6 @@ class VerifiedEmailRepository:
         return doc is not None
 
 
-class StudentEmailRepository:
-    """Repository for checking valid student emails from sheet1 collection"""
-    def __init__(self, db: AsyncIOMotorDatabase):
-        self.col = db["sheet1"]
-
-    async def ensure_indexes(self) -> None:
-        # Create index on Email ID field for faster lookups
-        await self.col.create_index("Email ID")
-
-    async def is_valid_student_email(self, email: str) -> bool:
-        """Check if email exists in the student database"""
-        doc = await self.col.find_one({"Email ID": email})
-        return doc is not None
-    
-    async def get_student_by_email(self, email: str) -> Optional[Dict[str, Any]]:
-        """Get student details by email"""
-        return await self.col.find_one({"Email ID": email})
-
-
 class UserRepository:
     def __init__(self, db: AsyncIOMotorDatabase):
         self.col = db["users"]
@@ -160,14 +141,6 @@ class AlumniPostRepository:
             return None
         return await self.col.find_one({"_id": oid})
 
-    async def update_post(self, post_id: str, alumni_email: str, updates: Dict[str, Any]) -> bool:
-        try:
-            oid = ObjectId(post_id)
-        except Exception:
-            return False
-        res = await self.col.update_one({"_id": oid, "alumniEmail": alumni_email}, {"$set": updates})
-        return bool(res.modified_count)
-
 
 class EventRepository:
     def __init__(self, db: AsyncIOMotorDatabase):
@@ -205,31 +178,12 @@ class EventRepository:
         cur = self.col.find(q, sort=[("startAt", 1), ("createdAt", -1)]).limit(int(limit))
         return [d async for d in cur]
 
-    async def exists_by_title_and_manager(self, title: str, manager_email: str, exclude_id: Optional[str] = None) -> bool:
-        query = {"title": title, "managerEmail": manager_email}
-        if exclude_id:
-            try:
-                oid = ObjectId(exclude_id)
-                query["_id"] = {"$ne": oid}
-            except Exception:
-                pass
-        doc = await self.col.find_one(query, {"_id": 1})
-        return doc is not None
-
     async def set_poster(self, event_id: str, manager_email: str, poster_meta: Dict[str, Any]) -> bool:
         try:
             oid = ObjectId(event_id)
         except Exception:
             return False
         res = await self.col.update_one({"_id": oid, "managerEmail": manager_email}, {"$set": {"poster": poster_meta}})
-        return bool(res.modified_count)
-
-    async def update_event(self, event_id: str, manager_email: str, updates: Dict[str, Any]) -> bool:
-        try:
-            oid = ObjectId(event_id)
-        except Exception:
-            return False
-        res = await self.col.update_one({"_id": oid, "managerEmail": manager_email}, {"$set": updates})
         return bool(res.modified_count)
 
 
@@ -532,4 +486,3 @@ class PlacementExperienceRepository:
     async def list_by_student(self, student_email: str, limit: int = 50) -> list[Dict[str, Any]]:
         cur = self.col.find({"studentEmail": student_email}).sort("createdAt", -1).limit(int(limit))
         return [d async for d in cur]
-
